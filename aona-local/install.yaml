@@ -260,6 +260,7 @@ stringData:
       certificatePath: /app/secrets/controller-control/tls.crt
       keyPath: /app/secrets/controller-control/tls.key
       updateFrequencySeconds: 30
+    platformServiceUrl: http://oes-platform:8095
     databases:
       audit:
         type: postgresql
@@ -277,6 +278,14 @@ metadata:
     release: "isdargo"
     chart: "isdargo-4.1.2"
   name: oes-carina-config
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: opsmx-agent-argocd-opsmx-controller-auth
+type: Opaque
+data:
+  authtoken: d3ZoYWJja2p3YnZmamh3ZWJmandiamZibGp3YmVmbGtqd3FiZWprbGZibGs=
 ---
 # Source: isdargo/templates/oes-audit/oes-audit-client-secret.yaml
 apiVersion: v1
@@ -790,7 +799,7 @@ stringData:
         caCertfile: /opt/opsmx/controller/ca.crt
         certFile: /opt/opsmx/controller/cert/tls.crt
         keyFile: /opt/opsmx/controller/cert/tls.key
-        image: quay.io/opsmxpublic/forwarder-agent:v3.5.9
+        image: quay.io/opsmxpublic/agent-client:v4.2.3
       template:
         path: /opt/opsmx/controller
         kubectlTemplateFileName: kubeconfig.template
@@ -2248,6 +2257,7 @@ data:
     standardErrorCodesMapping.ISD-IsNotFound-404-04 = ISD-IsNotFound-404-04 : {0} - {1} not found {2}.
     standardErrorCodesMapping.ISD-Unavailable-404-05 = ISD-Unavailable-404-05 : {0} - {1} is unavailable.
     standardErrorCodesMapping.ISD-AlreadyExists-409-01 = ISD-AlreadyExists-409-01 : {0} - {1} already exists: {2}
+    standardErrorCodesMapping.ISD-Disconnected-409-02 = ISD-Disconnected-409-02 : {0} - {1}
     standardErrorCodesMapping.ISD-FailedToDelete-412-01 = ISD-FailedToDelete-412-01 : {0} - Unable to delete {1} as {1} is already in use !
     standardErrorCodesMapping.ISD-FailedToDeletePolicy-412-02 = ISD-FailedToDeletePolicy-412-02 : {0} - Unable to delete policy as it is already in use for {1} gate !
     standardErrorCodesMapping.ISD-FailedToUpdate-412-03 = ISD-FailedToUpdate-412-03 : {0} - Unable to update {1} as {1} is already in use !
@@ -2315,6 +2325,9 @@ data:
     serviceAuth:
       currentKeyName: "public.pem"
       headerMutationKeyName: "public.pem"
+    agentAuth:
+      currentKeyName: "authtoken"
+      secretsPath: /app/secrets/agentAuth
     services:
       outgoingServices:
         - name: front50
@@ -5347,16 +5360,16 @@ data:
           "TOOLTIP": "Pipelines with manual judgement having slowest execution times"
         },
         "DEPLOYMENT_FREQUENCY": {
-        "TOOLTIP": "Deployment Frequency"
+        "TOOLTIP": "Number of Application Deployments in a day"
         },
         "MOST_ACTIVE_APPLICATIONS": {
-          "TOOLTIP": "Most Active Applications"
+          "TOOLTIP": "Applications with maximum number of App deployments"
         },
         "FASTEST_DEPLOYMENTS": {
-          "TOOLTIP": "Fastest Deployments"
+          "TOOLTIP": "Applications with shortest deployment time"
         },
         "SLOWEST_DEPLOYMENTS": {
-          "TOOLTIP": "Slowest Deployments"
+          "TOOLTIP": "Applications with longest deployment time"
         }
       },
       "ACCESS_MANAGEMENT": {
@@ -32928,7 +32941,7 @@ spec:
       annotations:
     spec:
       containers:
-      - image: quay.io/opsmxpublic/carina-instance:v1.11.0
+      - image: quay.io/opsmxpublic/carina-instance:v1.13.3
         imagePullPolicy: IfNotPresent
         name: carina-instance
         ports:
@@ -32979,7 +32992,7 @@ spec:
         checksum/secret: fded78fb79f163122ee7400d331e474f1421c46e7b26570ece98a6ef0c014ddc
     spec:
       containers:
-      - image: quay.io/opsmxpublic/carina-manager:v1.11.0
+      - image: quay.io/opsmxpublic/carina-manager:v1.13.3
         imagePullPolicy: IfNotPresent
         name: oes-carina
         ports:
@@ -33052,7 +33065,7 @@ spec:
     spec:
       containers:
       - name: opsmx-controller-controller1
-        image: quay.io/opsmxpublic/forwarder-controller:v3.5.9
+        image: quay.io/opsmxpublic/agent-controller:v4.2.3
         ports:
           - containerPort: 9001
             name: agent-grpc
@@ -33079,6 +33092,9 @@ spec:
         - name: jwt-secret
           mountPath: /app/secrets/serviceAuth
           readOnly: true
+        - name: authtoken
+          readOnly: true
+          mountPath: /app/secrets/agentAuth
         resources:
           requests:
             memory: "64Mi"
@@ -33087,6 +33103,10 @@ spec:
             memory: "128Mi"
             cpu: "250m"
       volumes:
+      - name: authtoken
+        secret:
+          secretName: opsmx-agent-argocd-opsmx-controller-auth
+          defaultMode: 420
       - name: ca-secret
         secret:
           secretName: ca-secret
@@ -33144,7 +33164,7 @@ spec:
             done;
             echo 'OESDB OK ✓'
       containers:
-      - image: quay.io/opsmxpublic/ubi8-oes-audit-client:v4.1.2.1-rc2
+      - image: quay.io/opsmxpublic/ubi8-oes-audit-client:v4.1.3
         imagePullPolicy: IfNotPresent
         name: oes-audit-client
         env:
@@ -33373,7 +33393,7 @@ spec:
             done;
             echo 'OESDB OK ✓'
       containers:
-      - image: quay.io/opsmxpublic/ubi8-oes-autopilot:v4.1.2.1-rc3
+      - image: quay.io/opsmxpublic/ubi8-oes-autopilot:v4.1.3
         imagePullPolicy: IfNotPresent
         name: oes-autopilot
         env:
@@ -33453,7 +33473,7 @@ spec:
         chart: "isdargo-4.1.2"
     spec:
       containers:
-      - image: quay.io/opsmxpublic/ubi8-oes-dashboard:v4.1.2
+      - image: quay.io/opsmxpublic/ubi8-oes-dashboard:v4.1.3
         name: oes-dashboard
         env:
         - name: JAVA_OPTS
@@ -33620,7 +33640,7 @@ spec:
         chart: "isdargo-4.1.2"
     spec:
       containers:
-      - image: quay.io/opsmxpublic/ubi8-gate:v4.1.2.1-rc2
+      - image: quay.io/opsmxpublic/ubi8-gate:v4.1.3
         name: oes-gate
         env:
         - name: spring_profiles_active
@@ -33717,7 +33737,7 @@ spec:
             done;
             echo 'OESDB OK ✓'
       containers:
-      - image: quay.io/opsmxpublic/ubi8-oes-platform:v4.1.2.1-rc3
+      - image: quay.io/opsmxpublic/ubi8-oes-platform:v4.1.3
         name: oes-platform
         env:
         - name: JAVA_OPTS
@@ -33814,7 +33834,7 @@ spec:
             done;
             echo 'OESDB OK ✓'
       containers:
-      - image: quay.io/opsmxpublic/ubi8-oes-sapor:v4.1.2.1-rc3
+      - image: quay.io/opsmxpublic/ubi8-oes-sapor:v4.1.3
         name: oes-sapor
         env:
         - name: JAVA_OPTS
@@ -33909,7 +33929,7 @@ spec:
         chart: "isdargo-4.1.2"
     spec:
       containers:
-      - image: quay.io/opsmxpublic/ubi8-oes-ui:v4.1.2.1-rc3
+      - image: quay.io/opsmxpublic/ubi8-oes-ui:v4.1.3
         name: oes-ui
         env:
         - name: JAVA_OPTS
@@ -34131,7 +34151,7 @@ spec:
               path: vela-api.yaml
           defaultMode: 420
       containers:
-      - image: quay.io/opsmxpublic/vela-api:v1.3.1
+      - image: quay.io/opsmxpublic/vela-api:v1.4.3
         imagePullPolicy: IfNotPresent
         name: vela
         ports:
